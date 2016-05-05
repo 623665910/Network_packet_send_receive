@@ -1,0 +1,31 @@
+#!/usr/bin/env python
+#encoding:UTF-8
+import socket
+import struct
+import time
+import random
+
+import send_packet
+
+ip_server='202.118.48.252'
+broad="\xff\xff\xff\xff\xff\xff"
+gw='\x00\x1a\xa9\x17\x83\xe5'
+master='\x44\x8a\x5b\xea\xb7\x25'
+node1='\x40\xa8\xf0\x01\xb2\x52'
+node2='\x44\x8a\x5b\xea\xb7\xea'
+test='\x08\x00\x27\x28\xe0\xa4'
+
+rawSocket=socket.socket(socket.PF_PACKET, socket.SOCK_RAW, socket.htons(0x0800))
+rawSocket.bind(("eth0", socket.htons(0x0000)))
+
+if __name__=="__main__":
+    des_eth=gw
+    src_eth=test
+    ip_src="222.26.28.188"
+    ip_des="202.118.48.252"
+
+    """xid  magic_cookie  需要自动生成"""
+    xid=send_packet.xid_format()
+    magic_cookie='\x63\x82\x53\x63'
+
+    send_packet.release_send(rawSocket, des_eth, src_eth, ip_src, ip_des, xid, magic_cookie)
